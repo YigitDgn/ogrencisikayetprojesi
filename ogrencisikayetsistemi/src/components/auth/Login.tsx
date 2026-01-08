@@ -1,38 +1,45 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 
-const API_URL = 'http://localhost:3000/auth'
+const API_URL = '/api/auth'
 
 function Login() {
   const navigate = useNavigate()
   
   // Eğer zaten giriş yapılmışsa uygun sayfaya yönlendir
   useEffect(() => {
-    const userData = localStorage.getItem('user')
-    if (userData) {
+    const checkAuth = async () => {
       try {
-        const user = JSON.parse(userData)
-        // Kullanıcı zaten giriş yapmışsa uygun sayfaya yönlendir
-        if (user && typeof user === 'object' && user.roleType) {
-          // Admin ise admin paneline, diğer tüm kullanıcılar anasayfaya
-          if (user.roleType === 'admin') {
-            navigate('/admin', { replace: true })
-          } else {
-            // student, personnel veya diğer tüm roller için anasayfa
-            navigate('/anasayfa', { replace: true })
+        const response = await fetch(`${API_URL}/me`, {
+          credentials: 'include',
+        })
+        if (response.ok) {
+          const user = await response.json()
+          // Kullanıcı zaten giriş yapmışsa uygun sayfaya yönlendir
+          if (user && typeof user === 'object' && user.roleType) {
+            // Admin ise admin paneline, diğer tüm kullanıcılar anasayfaya
+            if (user.roleType === 'admin') {
+              navigate('/admin', { replace: true })
+            } else {
+              // student, personnel veya diğer tüm roller için anasayfa
+              navigate('/anasayfa', { replace: true })
+            }
           }
         }
       } catch (error) {
-        // Geçersiz veri - localStorage'ı temizle
-        localStorage.removeItem('user')
+        // Giriş yapılmamış, sayfada kal
       }
     }
+    checkAuth()
   }, [navigate])
   const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [photo, setPhoto] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -44,20 +51,28 @@ function Login() {
     try {
       const response = await fetch(`${API_URL}/login`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, password }),
       })
 
-      const data = await response.json()
+      // Response'un içeriğini kontrol et
+      const text = await response.text()
+      let data
+      
+      try {
+        data = text ? JSON.parse(text) : {}
+      } catch (parseError) {
+        throw new Error('Sunucudan geçersiz yanıt alındı')
+      }
 
       if (!response.ok) {
         throw new Error(data.message || 'Giriş başarısız')
       }
 
-      // Başarılı giriş
-      localStorage.setItem('user', JSON.stringify(data))
+      // Başarılı giriş - cookie otomatik olarak set edildi
       window.dispatchEvent(new Event('userLogin'))
       
       // Admin ise admin paneline, değilse anasayfaya yönlendir
@@ -73,9 +88,42 @@ function Login() {
     }
   }
 
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Dosya tipini kontrol et
+      if (!file.type.startsWith('image/')) {
+        setError('Lütfen bir resim dosyası seçin')
+        return
+      }
+      
+      // Dosya boyutunu kontrol et (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Dosya boyutu 5MB\'dan küçük olmalıdır')
+        return
+      }
+
+      setPhoto(file)
+      setError('')
+      
+      // Preview oluştur
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setPhotoPreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    // E-posta adresinin @university.edu ile bitmesi gerekiyor
+    if (!email.toLowerCase().endsWith('@university.edu')) {
+      setError('E-posta adresi @university.edu ile bitmelidir')
+      return
+    }
 
     if (password !== confirmPassword) {
       setError('Şifreler eşleşmiyor')
@@ -85,22 +133,37 @@ function Login() {
     setLoading(true)
 
     try {
+      // FormData oluştur
+      const formData = new FormData()
+      formData.append('firstName', firstName)
+      formData.append('lastName', lastName)
+      formData.append('email', email)
+      formData.append('password', password)
+      if (photo) {
+        formData.append('photo', photo)
+      }
+
       const response = await fetch(`${API_URL}/register`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name, email, password }),
+        credentials: 'include',
+        body: formData,
       })
 
-      const data = await response.json()
+      // Response'un içeriğini kontrol et
+      const text = await response.text()
+      let data
+      
+      try {
+        data = text ? JSON.parse(text) : {}
+      } catch (parseError) {
+        throw new Error('Sunucudan geçersiz yanıt alındı')
+      }
 
       if (!response.ok) {
         throw new Error(data.message || 'Kayıt başarısız')
       }
 
-      // Başarılı kayıt - otomatik giriş yap
-      localStorage.setItem('user', JSON.stringify(data))
+      // Başarılı kayıt - cookie otomatik olarak set edildi
       window.dispatchEvent(new Event('userLogin'))
       
       // Admin ise admin paneline, değilse anasayfaya yönlendir
@@ -117,8 +180,15 @@ function Login() {
   }
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-12 py-12 bg-gradient-to-b from-[#0077BE] to-[#00427F] overflow-hidden">
-      <div className="bg-white rounded-xl p-10 w-full max-w-[450px] shadow-lg">
+    <div className="min-h-screen flex flex-col items-center justify-center px-12 py-12 bg-gradient-to-b from-[#0077BE] to-[#00427F] overflow-hidden">
+      <div className="bg-white rounded-xl p-10 w-full max-w-[450px] shadow-lg relative">
+        <Link
+          to="/anasayfa"
+          className="absolute top-4 left-4 text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-2"
+        >
+          <span className="text-xl">←</span>
+          <span className="text-sm font-medium">Anasayfaya Dön</span>
+        </Link>
         <h2 className="text-black text-3xl font-semibold mb-8 m-0 text-center">
           {isLogin ? 'Giriş Yap' : 'Kayıt Ol'}
         </h2>
@@ -171,6 +241,11 @@ function Login() {
                   setIsLogin(false)
                   setEmail('')
                   setPassword('')
+                  setFirstName('')
+                  setLastName('')
+                  setConfirmPassword('')
+                  setPhoto(null)
+                  setPhotoPreview(null)
                   setError('')
                 }}
               >
@@ -181,13 +256,25 @@ function Login() {
         ) : (
           <form onSubmit={handleRegisterSubmit} className="flex flex-col gap-6">
             <div className="flex flex-col gap-2">
-              <label htmlFor="name" className="text-[#333] text-[0.95rem] font-medium">Ad Soyad</label>
+              <label htmlFor="firstName" className="text-[#333] text-[0.95rem] font-medium">Ad</label>
               <input
                 type="text"
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Adınızı ve soyadınızı girin"
+                id="firstName"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="Adınızı girin"
+                required
+                className="px-4 py-3 border border-[#ddd] rounded-md text-base transition-colors focus:outline-none focus:border-[#0077BE] focus:ring-4 focus:ring-[#0077BE]/10"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label htmlFor="lastName" className="text-[#333] text-[0.95rem] font-medium">Soyad</label>
+              <input
+                type="text"
+                id="lastName"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Soyadınızı girin"
                 required
                 className="px-4 py-3 border border-[#ddd] rounded-md text-base transition-colors focus:outline-none focus:border-[#0077BE] focus:ring-4 focus:ring-[#0077BE]/10"
               />
@@ -199,10 +286,11 @@ function Login() {
                 id="register-email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="E-posta adresinizi girin"
+                placeholder="ornek@university.edu"
                 required
                 className="px-4 py-3 border border-[#ddd] rounded-md text-base transition-colors focus:outline-none focus:border-[#0077BE] focus:ring-4 focus:ring-[#0077BE]/10"
               />
+              <p className="text-xs text-gray-500">E-posta adresi @university.edu ile bitmelidir</p>
             </div>
             <div className="flex flex-col gap-2">
               <label htmlFor="register-password" className="text-[#333] text-[0.95rem] font-medium">Şifre</label>
@@ -228,6 +316,27 @@ function Login() {
                 className="px-4 py-3 border border-[#ddd] rounded-md text-base transition-colors focus:outline-none focus:border-[#0077BE] focus:ring-4 focus:ring-[#0077BE]/10"
               />
             </div>
+            <div className="flex flex-col gap-2">
+              <label htmlFor="photo" className="text-[#333] text-[0.95rem] font-medium">Fotoğraf (İsteğe Bağlı)</label>
+              <input
+                type="file"
+                id="photo"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                className="px-4 py-3 border border-[#ddd] rounded-md text-base transition-colors focus:outline-none focus:border-[#0077BE] focus:ring-4 focus:ring-[#0077BE]/10"
+              />
+              {photoPreview && (
+                <div className="mt-2">
+                  <p className="text-sm text-gray-600 mb-2">Önizleme:</p>
+                  <img
+                    src={photoPreview}
+                    alt="Fotoğraf önizleme"
+                    className="w-24 h-24 object-cover rounded-lg border border-gray-300"
+                  />
+                </div>
+              )}
+              <p className="text-xs text-gray-500 mt-1">Maksimum dosya boyutu: 5MB</p>
+            </div>
             <button 
               type="submit" 
               disabled={loading}
@@ -244,7 +353,8 @@ function Login() {
                   setIsLogin(true)
                   setEmail('')
                   setPassword('')
-                  setName('')
+                  setFirstName('')
+                  setLastName('')
                   setConfirmPassword('')
                   setError('')
                 }}

@@ -33,5 +33,8 @@ export class Personnel {
 
   @OneToMany(() => Complaint, (complaint) => complaint.handledByPersonnel)
   handledComplaints: Complaint[];
+
+  @OneToMany(() => Complaint, (complaint) => complaint.completedByPersonnel)
+  completedComplaints: Complaint[];
 }
 

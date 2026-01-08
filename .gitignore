@@ -1,6 +1,15 @@
 # Proje Raporu
 *.docx
+*.pdf
 23253077_proje_rapor.docx
+
+# Test dosyalarını hariç tut
+tests/
+**/tests/
+*.pyc
+__pycache__/
+
+
 
 # Node modules
 node_modules/
@@ -29,6 +38,8 @@ pnpm-debug.log*
 *.sqlite
 *.sqlite3
 *.db
+# SQLite database 
+backend/database.sqlite
 
 # Uploads
 uploads/

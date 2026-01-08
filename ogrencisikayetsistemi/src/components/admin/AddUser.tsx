@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const API_URL = 'http://localhost:3000'
+const API_URL = '/api'
 
 function AddUser() {
   const navigate = useNavigate()
   const [newUser, setNewUser] = useState({
-    username: '',
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
     roleType: 'student',
@@ -50,16 +51,19 @@ function AddUser() {
     setError('')
 
     try {
-      // Kullanıcı bilgisini al
-      const userStr = localStorage.getItem('user')
-      if (!userStr) {
+      // Kullanıcı bilgisini backend'den al
+      const userResponse = await fetch(`${API_URL}/auth/me`, {
+        credentials: 'include',
+      })
+      if (!userResponse.ok) {
         throw new Error('Oturum bulunamadı. Lütfen tekrar giriş yapın.')
       }
-      const user = JSON.parse(userStr)
+      const user = await userResponse.json()
 
       // FormData oluştur
       const formData = new FormData()
-      formData.append('username', newUser.username)
+      formData.append('firstName', newUser.firstName)
+      formData.append('lastName', newUser.lastName)
       formData.append('email', newUser.email)
       formData.append('password', newUser.password)
       formData.append('roleType', newUser.roleType)
@@ -75,6 +79,7 @@ function AddUser() {
 
       const response = await fetch(`${API_URL}/admin/users`, {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       })
 
@@ -119,15 +124,28 @@ function AddUser() {
           <form onSubmit={handleAddUser} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Kullanıcı Adı <span className="text-red-500">*</span>
+                Ad <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
-                value={newUser.username}
-                onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                value={newUser.firstName}
+                onChange={(e) => setNewUser({ ...newUser, firstName: e.target.value })}
                 required
                 className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0077BE] text-base"
-                placeholder="Kullanıcı adını girin"
+                placeholder="Adını girin"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Soyad <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={newUser.lastName}
+                onChange={(e) => setNewUser({ ...newUser, lastName: e.target.value })}
+                required
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0077BE] text-base"
+                placeholder="Soyadını girin"
               />
             </div>
 
